@@ -1,0 +1,3 @@
+#lang plai/mutator
+(allocator-setup "sc.rkt" 20)
+

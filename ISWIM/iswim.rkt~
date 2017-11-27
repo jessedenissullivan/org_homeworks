@@ -1,0 +1,51 @@
+
+#lang racket
+
+(provide delta
+         interpret
+         substitute)
+
+(define delta
+  (lambda (e)
+    (match e
+      [`(,op ,args ...)
+       (cond
+         [(not (eq? 2 (length args)))
+          (raise "Used the wrong number of args to delta: ~a\n" e)]
+         [else
+          (match op
+            ['+ (apply + args)]
+            ['* (apply * args)]
+            ['- (apply - args)]
+            ['/ (apply / args)]
+            [else (raise "Unrecognized operator: ~a\n" e)]
+            )])]
+      [else (raise "Unrecognized argument to delta: ~a\n" e)])))
+
+(define (substitute env f)
+  (match f
+    [(? symbol?) (hash-ref env f f)]
+    [(? number?) f]
+    [`(lambda ,parms ,body) (let ([new_env (for/fold ([e env])
+                                                     ([x parms])
+                                             (hash-remove e x))])
+                              (substitute new_env body))]
+    [`(,op ,ms ...) (let ([vs (map (curry substitute env) ms)])
+                      `(,op ,@vs))]))
+
+(define interpret
+  (lambda (env e)
+    (match e
+      [(? number?) e]      ; Values
+      [(? symbol?) (hash-ref env e e)]
+      [`(lambda ,params ,body) (values params body)]      
+      [`(,op ,args ...) (let ([vs (map (curry interpret env) args)])
+                          (delta `(,op ,@vs)))]
+      [`(,m ,n) (let ([params (interpret env m)]
+                      [body (interpret env m)]
+                      [args (interpret env n)]
+                      [new_env (hash (for/list ([i params]
+                                                [j args])
+                                       ))])
+                  (substitute (hash ) body))]
+      [else (raise "Interpreter does not recognize argument")])))

@@ -1,0 +1,187 @@
+#lang plai/collector
+
+;; A tri-color mark and sweep algorithm. There are three sets of heap nodes:
+;; gray, white, and black. Black nodes are known to not be garbage or hold 
+;; references to garbage, gray nodes are known to not be garbage but their
+;; references have not been checked, and white nodes, the rest, are garbage.
+;; * The black set begins empty
+;; * The gray set begins with the roots
+;; * All non root nodes begin in the white set
+;; * Iterate over the gray set. "Blacken" each node by "graying" the nodes
+;;   it references.
+;; * When all gray nodes have been touched, the remaining white nodes are
+;;   considered garbage, and their space can be reclaimed.
+
+;; Initialize allocator. Iterate over all of the cells in the heap,
+;; and mark them 'free
+(define (init-allocator) 
+  (for ([i (in-range 0 (heap-size))])
+    (heap-set! i 'free)))
+
+;; Dereference the cell location, return the value if it is flat. 
+(define (gc:deref loc) 
+  (cond
+    [(equal? (heap-ref loc) 'flat)
+     (heap-ref (+ loc 1))]
+    [else
+     (error 'gc:deref "attempted to deref a non flat value, loc ~s" loc)]))
+
+;; Return the first value in the cell if it stores a pair
+(define (gc:first pr-ptr) 
+  (if (equal? (heap-ref pr-ptr) 'pair)
+      (heap-ref (+ pr-ptr 1))
+      (error 'first "non pair")))
+
+;; Return the rest value in the cell if it stores a pair
+(define (gc:rest pr-ptr) 
+  (if (equal? (heap-ref pr-ptr) 'pair)
+      (heap-ref (+ pr-ptr 2))
+      (error 'first "non pair")))
+
+;; Does this cell store a flat value?
+(define (gc:flat? loc) (equal? (heap-ref loc) 'flat))
+
+;; Does this cell store a pair?
+(define (gc:cons? loc) (equal? (heap-ref loc) 'pair))
+
+;; Set the first value in a pair
+(define (gc:set-first! pr-ptr new) 
+  (if (equal? (heap-ref pr-ptr) 'pair)
+      (heap-set! (+ pr-ptr 1) new)
+      (error 'set-first! "non pair")))
+
+;; Set the rest value in a pair
+(define (gc:set-rest! pr-ptr new) 
+  (if (equal? (heap-ref pr-ptr) 'pair)
+      (heap-set! (+ pr-ptr 2) new)
+      (error 'set-first! "non pair")))
+
+;; Allocate a flat value, store it on the heap
+(define (gc:alloc-flat fv) 
+  (let ([ptr (alloc 2 (λ () 
+                        (if (procedure? fv)
+                            (append (procedure-roots fv)
+                                    (get-root-set))
+                            (get-root-set))))])
+    (heap-set! ptr 'flat)
+    (heap-set! (+ ptr 1) fv)
+    ptr))
+
+;; Cons two allocated values and store the list on the heap
+(define (gc:cons hd tl)
+  (let ([ptr (alloc 3 (λ () (get-root-set hd tl)))])
+    (heap-set! ptr 'pair)
+    (heap-set! (+ ptr 1) hd)
+    (heap-set! (+ ptr 2) tl)
+    ptr))
+
+;; Allocate n memory cells. Accepts a get-roots function that will return
+;; the heap roots.
+(define (alloc n get-roots)
+  (let ([next (find-free-space 0 n)])
+    (cond
+      [next
+       next]
+      [else
+       (collect-garbage get-roots)
+       (let ([next (find-free-space 0 n)])
+         (unless next
+           (error 'alloc "out of space"))
+         next)])))
+
+;; If we're out of space on the heap, collect the garbage. High level interface
+;; function, the meat of the algorithm is in collect-garbage-help below
+(define (collect-garbage get-roots)
+  (let ([roots (map read-root (get-roots))]) ;; Get the addresses of all of the roots
+    (eprintf "roots: ~a\n" roots)
+    (collect-garbage-help 
+       roots ;; Pass roots as the 'gray' set
+       (remove* roots (get-all-records 0))))) ;; Remove the roots from all records and pass
+                                              ;; as the 'white' set
+
+;; The bulk of the algorithm
+(define (collect-garbage-help gray white)
+  (cond
+    [(null? gray) (free! white)] ;; If the gray list is empty, free the whites with no other work
+    [else
+     (case (heap-ref (car gray)) ;; Grab the label for each gray cell
+       [(flat) ;; Is it a flat value?
+        (let ([proc (heap-ref (+ (car gray) 1))])
+          (if (procedure? proc)
+              (let ([new-locs (map read-root (procedure-roots proc))])
+                (eprintf "proc roots: ~a\n" new-locs)
+                (collect-garbage-help 
+                 (add-in new-locs (cdr gray) white)
+                 (remove* new-locs white)))
+              (collect-garbage-help (cdr gray) white)))]
+       [(pair) ;; Is it a pair?
+        (let ([hd (heap-ref (+ (car gray) 1))]
+              [tl (heap-ref (+ (car gray) 2))])
+          (collect-garbage-help 
+           (add-in (list hd tl) (cdr gray) white)
+           (remove tl (remove hd white))))]
+       [else ;; Is it something far more sinister altogether?
+        (error 'collect-garbage "unknown tag ~s, loc ~s" (heap-ref (car gray)) (car gray))])]))
+
+;; Free all the cells in the white group. This only occurs after we are certain
+;; that no gray or black objects hold references to these objects and vice versa.
+(define (free! whites)
+  (cond
+    [(null? whites) (void)]
+    [else
+     (let ([white (car whites)])
+       (case (heap-ref white)
+         [(pair) 
+          (heap-set! white 'free)
+          (heap-set! (+ white 1) 'free)
+          (heap-set! (+ white 2) 'free)]
+         [(flat)
+          (heap-set! white 'free)
+          (heap-set! (+ white 1) 'free)]
+         [else 
+          (error 'free! "unknown tag ~s\n" (heap-ref white))])
+       (free! (cdr whites)))]))
+      
+;; add-in : (listof location) (listof location) (listof location) -> (listof location)
+;; computes a new set of gray addresses by addding all white elements of locs to gray
+(define (add-in locs gray white)
+  (cond
+    [(null? locs) gray]
+    [else
+     (let* ([loc (car locs)]
+            [white? (member loc white)])
+       (add-in (cdr locs)
+               (if white? (cons loc gray) gray)
+               white))]))
+
+;; Walk the entire heap.
+(define (get-all-records i)
+  (cond
+    [(< i (heap-size))
+     (case (heap-ref i)
+       [(pair) (cons i (get-all-records (+ i 3)))]
+       [(flat) (cons i (get-all-records (+ i 2)))]
+       [(free) (get-all-records (+ i 1))]
+       [else (get-all-records (+ i 1))])]
+    [else null]))
+
+;; Starting at start, crawl the stack until we find size contiguous
+;; free cells.
+(define (find-free-space start size)
+  (cond
+    [(= start (heap-size))
+     #f]
+    [(n-free-blocks? start size)
+     start]
+    [else
+     (find-free-space (+ start 1) size)]))
+
+;; Does the space starting at start with an offset of size contain
+;; n free blocks?
+(define (n-free-blocks? start size)
+  (cond
+    [(= size 0) #t]
+    [(= start (heap-size)) #f]
+    [else 
+     (and (eq? 'free (heap-ref start))
+          (n-free-blocks? (+ start 1) (- size 1)))]))

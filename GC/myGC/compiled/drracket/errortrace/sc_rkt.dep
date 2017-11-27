@@ -1,0 +1,1 @@
+("6.8" ("8bb621c5d828b49a76d316832c0859bd88f354c8" . "57c49ea3ddb3ec5acd79695c3b21e72887448a48") (collects #"errortrace" #"errortrace-key.rkt") (collects #"plai" #"collector" #"lang" #"reader.rkt") (collects #"plai" #"collector.rkt") (collects #"scheme" #"main.rkt") (collects #"scheme" #"runtime-config.rkt"))

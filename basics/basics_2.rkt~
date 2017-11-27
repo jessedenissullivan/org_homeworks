@@ -1,0 +1,74 @@
+#lang racket
+
+; Combinator
+(define Y (lambda (f)
+            ((λ (x) (f (x x))) (λ (x) (f (x x))))))
+
+; Control flow expressions
+(define if (lambda (b)
+             (lambda (t)
+               (lambda (f)
+                 ((b t) f)))))
+(define if0 (lambda (n)
+              ((n (λ (x) false)) true)))
+(define true (lambda (x y)
+                 x))
+(define false (lambda (x)
+                (lambda (y)
+                  y)))
+
+; Data structures
+(define pair (lambda (m)
+               (lambda (n)
+                 (lambda (s)
+                   ((s m) n)))))
+(define fst (lambda (p)
+              (p true)))
+(define snd (lambda (p)
+              (p false)))
+
+; Arithmetic
+(define add1 (lambda (n)
+               (lambda (f)
+                 (lambda (x)
+                   (f ((n f) x))))))
+(define add (lambda (m)
+              (lambda (n)
+                ((m add1) n))))
+(define trans (lambda (p)
+                ((pair (p snd)) (add1 (p snd)))))
+(define sub1 (lambda (n)
+               (((n trans) ((pair zero) zero)) fst)))
+
+; Utilities
+(define inc (lambda (x) (+ x 1)))
+(define mkNum (lambda (f)
+                ((f inc) 0)))
+
+; Numbers
+(define zero (lambda (f)
+               (lambda (x)
+                 x)))
+(define one (lambda (f)
+              (lambda (x)
+                (f x))))
+(define two (add1 one))
+
+; Fibonacci
+
+
+; Tests
+;(if0 zero)
+;(if0 one)
+;(mkNum (sub1 two))
+(pair zero)
+((pair zero) one)
+(((pair zero) one) fst)
+((((pair zero) one) fst) inc)
+(((((pair zero) one) fst) inc) 0)
+
+;(mkNum (((pair zero) zero) fst))
+;(mkNum (((pair zero) zero) snd))
+;(mkNum (((pair zero) one) fst))
+;(mkNum (((pair zero) two) fst))
+(mkNum (((pair zero) two) snd))

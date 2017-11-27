@@ -1,0 +1,30 @@
+#lang racket
+
+(require "iswim.rkt")
+
+;(not (eq? #f (member 1 (list 1 2 3 4))))
+;(not (eq? #f (member 5 (list 1 2 3 4))))
+;(not (eq? #f (member + (list + - / *))))
+;(not (eq? #f (member '\ (list + - / *))))
+
+(delta '(+ 1 2))
+;(delta '(+ 1 2 3))
+;(delta '(+ 1))
+;(delta '(+))
+;(delta '(^ 1 2))
+
+(define h (hash '(a b) '(1 2)))
+
+(define parms '(a b c))
+(define args '(1 2 3))
+(define th (hash 'a 1 'b 2 'c 3))
+(immutable? th)
+(define th2 (for/fold ([env th])
+          ([x '(a b)])
+  (hash-remove env x)))
+(immutable? th2)
+
+
+(substitute th '(+ a b c))
+(substitute th '(lambda (d) (+ a b c)))
+(substitute th '(+ a b (lambda (c) c)))
