@@ -11,20 +11,20 @@
       [`(,op ,args ...)
        (cond
          [(not (eq? 2 (length args)))
-          (raise "Used the wrong number of args to delta: ~a\n" e)]
+          (error "Used the wrong number of args to delta: " e)]
          [else
           (match op
             ['+ (apply + args)]
             ['* (apply * args)]
             ['- (apply - args)]
             ['/ (apply / args)]
-            [else (raise "Unrecognized operator: ~a\n" e)]
+            [else (error "Unrecognized operator: " op)]
             )])]
-      [else (raise "Unrecognized argument to delta: ~a\n" e)])))
+      [else (error "Unrecognized argument to delta: s" e)])))
 
 (define (substitute env f)
   (match f
-    [(? symbol?) (hash-ref env f f)]
+    [(? symbol?) (hash-ref env f f)] ; look up val in env ow ret sym
     [(? number?) f]
     [`(lambda ,parms ,body) (let ([new_env (for/fold ([e env])
                                                      ([x parms])
@@ -39,13 +39,13 @@
       [(? number?) e]      ; Values
       [(? symbol?) (hash-ref env e e)]
       [`(lambda ,params ,body) (values params body)]      
+      [`(,m ,n) (letrec-values ([(params body) (interpret env m)]
+                                [(args) (values (interpret env n))]
+                                [(env_p) (for/fold ([env_p env])
+                                                   ([arg `(,args)]
+                                                    [param params])
+                                           (hash-set env_p param arg))])
+                  (substitute env_p body))]
       [`(,op ,args ...) (let ([vs (map (curry interpret env) args)])
                           (delta `(,op ,@vs)))]
-      [`(,m ,n) (let ([params (interpret env m)]
-                      [body (interpret env m)]
-                      [args (interpret env n)]
-                      [new_env (hash (for/list ([i params]
-                                                [j args])
-                                       ))])
-                  (substitute (hash ) body))]
       [else (raise "Interpreter does not recognize argument")])))

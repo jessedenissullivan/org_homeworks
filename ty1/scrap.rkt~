@@ -1,0 +1,26 @@
+#lang racket
+(if (eq? t1 t2)
+                                  (unify (cdr constraints env)) ;; the constraint is a tautology
+                                  (begin
+                                    (eprintf "t1 = ~a, t2 = ~a\n" t1 t2)
+                                    (eprintf "t1 = ~a, (sym? t2) = ~a\n" t1 (symbol? t2))
+                                    (cond [(eq? t1 'num) (if (is-not-in-free-vars-of t1 t2)
+                                                                 (hash-set! env t2 t1)
+                                                                 (error 'unify "Type is recursive, this is forbidden"))]
+                                               [(eq? t2 'num) (if (is-not-in-free-vars-of t2 t1)
+                                                                 (hash-set! env t1 t2)
+                                                                 (error 'unify "Type is recursive, this is forbidden"))]
+                                               [(eq? t1 'bool) (if (is-not-in-free-vars-of t1 t2)
+                                                                 (hash-set! env t2 t1)
+                                                                 (error 'unify "Type is recursive, this is forbidden"))]
+                                               [(eq? t2 'bool) (if (is-not-in-free-vars-of t2 t1)
+                                                                 (hash-set! env t1 t2)
+                                                                 (error 'unify "Type is recursive, this is forbidden"))]
+                                               [(symbol? t1) (if (is-not-in-free-vars-of t2 t1)
+                                                                 (hash-set! env t1 t2)
+                                                                 (error 'unify "Type is recursive, this is forbidden"))]
+                                               [(symbol? t2) (if (is-not-in-free-vars-of t1 t2)
+                                                                 (hash-set! env t2 t1)
+                                                                 (error 'unify "Type is recursive, this is forbidden"))])
+                                         (unify (cdr constraints)
+                                                env)))

@@ -1,5 +1,3 @@
-
-
 #lang racket
 
 (provide delta

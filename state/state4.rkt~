@@ -1,0 +1,14 @@
+#lang racket
+
+(define (interp c env store)
+  (match c
+    [`(lambda (,x : ,ty) ,b) c]
+    [`(set! ,x ,v) (hash-set! store x v)]
+    [`(seq ,bs ...) (map (lambda (x) (interp x env store)) bs)]
+    [`(let (,defs ...) ,b) ...]
+    [`(,m ,n) ...]
+    [`(,op ,ms ...) ...]
+    [else (cond [(symbol? c) ...]
+                [(number? c) ...]
+                [(boolean? c) ...]
+                [else ...])]))

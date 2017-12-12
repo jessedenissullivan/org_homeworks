@@ -7,15 +7,20 @@
 
 ;; Initialize allocator. Iterate over all of the cells in the heap,
 ;; and mark them 'free
-(define (init-allocator) 
-  (for ([i (in-range 0 (heap-size))])
-    (heap-set! i 'free)))
+(define (init-allocator)
+  (set! from-beg 0)
+  (set! size (/ (heap-size) 2))
+  (set! to-beg (+ from-beg size))
+  (for ([i (in-range from-beg (+ from-beg size))])
+    (heap-set! i 'free-from))
+  (for ([i (in-range to-beg (+ to-beg size))])
+    (heap-set! i 'free-to)))
 
 ;; Dereference the cell location, return the value if it is flat. 
-(define (gc:deref loc) 
-  (cond
-    [(equal? (heap-ref loc) 'flat)
-     (heap-ref (+ loc 1))]
+(define (gc:deref loc)
+  (printf "loc is ~a\n" loc)
+  (case (heap-ref loc)
+    ['flat (heap-ref (+ loc 1))]
     [else
      (error 'gc:deref "attempted to deref a non flat value, loc ~s" loc)]))
 
@@ -51,31 +56,48 @@
 
 ;; Allocate a flat value, store it on the heap
 (define (gc:alloc-flat fv) 
-  (let ([ptr (alloc 2 (λ () 
-                        (if (procedure? fv)
-                            (append (procedure-roots fv)
-                                    (get-root-set))
-                            (get-root-set))))])
+  (let ([ptr (alloc 2)])
     (heap-set! ptr 'flat)
     (heap-set! (+ ptr 1) fv)
     ptr))
 
 ;; Cons two allocated values and store the list on the heap
 (define (gc:cons hd tl)
-  (let ([ptr (alloc 3 (λ () (get-root-set hd tl)))])
+  ;(eprintf "allocating pair, hd = ~a, tl = ~a,\n" hd tl)
+  (let ([ptr (alloc 3)]
+        [car (if (eq? (heap-ref hd) 'forward)
+                 (heap-ref (+ hd 1))
+                 hd)]
+        [cdr (if (eq? (heap-ref tl) 'forward)
+                 (heap-ref (+ tl 1))
+                 tl)])    
     (heap-set! ptr 'pair)
-    (heap-set! (+ ptr 1) hd)
-    (heap-set! (+ ptr 2) tl)
+    (heap-set! (+ ptr 1) car)
+    (heap-set! (+ ptr 2) cdr)
+    ;(eprintf "Root set: ~a\n" (map read-root (get-root-set)))
     ptr))
 
-;; functions written by Jesse Sullivan
+;; Pointer to the beginning of the from space
+;; intialized in init-allocator
+(define from-beg 0)
+
+;; Pointer to the beginning of the to space
+;; intialized in init-allocator
+(define to-beg 0)
+
+;; Holder for size of the from and to space
+;; intialized in init-allocator
+(define size 0)
 
 ;; Allocates free space of size n on the heap and returns a pointer to it
 ;; if it can't find free space it runs the garbage collector and tries again
 ;; otherwise it throws an error saying that the heap is out of memory
 (define (alloc n)
-  (let ([ptr_to_mem (find-free-space n)])
-    (cond [ptr_to_mem ptr_to_mem]  ; was able to find spot in mem on first try
+  (when (<= n 0)
+    (error 'alloc "Tried to alloc ~a number of bytes\n" n))
+  (let ([ptr_to_mem (find-free-space 0 n)])
+    (cond [(and (<= from-beg ptr_to_mem)
+                (> (+ from-beg size)　ptr_to_mem)) ptr_to_mem]  ; was able to find spot in mem on first try
           [else (collect-garbage) ; otherwise run the garbage collector
                 (set! ptr_to_mem (find-free-space 0 n)) ; try again
                 (if (eq? ptr_to_mem -1)
@@ -88,6 +110,7 @@
 ;; start is the ptr to the first block in memory
 ;; start + size is the pointer to the last block allocated if the mem is allocated
 (define (find-free-space start size)
+  ;(eprintf "In find-free-space, start is ~a\n" start)
   (cond [(eq? size 0) (error 'find-free-space "You can't allocate nothing on the heap")]
         [(and (eq? (+ start size) (heap-size))  ;; searched whole heap, couldn't allocate new memory
               (not (is-contiguous? start size))) -1]
@@ -99,7 +122,59 @@
 ;; returns true of the block between locations are all marked 'free
 ;; returns false otherwise
 (define (is-contiguous? start size)
-  (let ([block (for/fold ([blk '()])
+  (let ([block (for/fold ([blk (list)])
                          ([i (in-range size)])
-                 (append blk (heap-ref (+ start i))))])
-    (andmap (eq? 'free) block)))
+                 (append blk `(,(heap-ref (+ start i)))))])
+    ;(eprintf "block is ~a\n" block)
+    (andmap (lambda (x) (eq? 'free-from x)) block)))
+
+;; define new pointer into two space for copying objects
+(define to-space-ptr to-beg)
+
+;; function to run garbage collector
+;; uses the stop and copy algorithm for garbage collection
+(define (collect-garbage)  
+  (for ([i (in-range to-beg (+ to-beg size))])   ;; set all to- space mem to from- space
+    (heap-set! i 'free-from))                   ;; keeps allocator working
+  (eprintf "Collecting garbage, root set: ~a\n" (map read-root (get-root-set)))
+  (set! to-space-ptr to-beg)
+  (map
+   (lambda (ptr)
+     (collect-garbage-the-recursive-part ptr))
+   (map read-root (get-root-set)))
+  (set! from-beg (modulo (+ from-beg size) (heap-size))) ;; switch from- and to- space pointers
+  (set! to-beg (modulo (+ to-beg size) (heap-size))))
+
+;; looks at each object and copies it appropriately
+;; if object contains references to other objects,
+;; it copies it recursively
+(define (collect-garbage-the-recursive-part ptr)
+  ;(eprintf "\nin rec-gc, ptr =~a, points to ~a\n" ptr (heap-ref ptr))
+  (case (heap-ref ptr)
+    ['free-from 'free-from]
+    ['free-to   'free-to]
+    ['flat ;(eprintf "in 'flat, ptr =~a\n" ptr)
+           ;(eprintf "procedure? ~a\n" (procedure? ptr))
+           (cond
+             [(procedure? (+ 1 ptr)) (eprintf "Hi")]
+             [(and (<= from-beg ptr)
+                   (> (+ from-beg size) ptr)) (eprintf "in from-space, to-space-ptr = ~a\n" to-space-ptr)
+                                              (heap-set! to-space-ptr 'flat)  ;; if value is not in from-space, copy it
+                                              (heap-set! (+ to-space-ptr 1) (heap-ref (+ 1 ptr)))
+                                              (heap-set! ptr 'forward) ;; make previous pointer a forwarding pointer
+                                              (heap-set! (+ ptr 1) to-space-ptr)]
+             [(and (< to-beg ptr)
+                   (>= (+ to-beg size) ptr)) void] ;; if value is in to-space, stop copying              
+             [else (error 'collect-garbage-the-recursive-part "Pointer to object in invalid range")])
+           (set! to-space-ptr (+ to-space-ptr 2))
+           (- to-space-ptr 2)]
+    ['pair (let ([car (collect-garbage-the-recursive-part (heap-ref (+ ptr 1)))]
+                 [cdr (collect-garbage-the-recursive-part (heap-ref (+ ptr 2)))])
+             (begin (eprintf "in pair, hd = ~a, tl = ~a\n" car (procedure? cdr))
+                    (heap-set! to-space-ptr 'pair)
+                    (heap-set! (+ 1 to-space-ptr) car)
+                    (heap-set! (+ 2 to-space-ptr) cdr)))
+           (set! to-space-ptr (+ 3 to-space-ptr))]
+    ['forward ;(eprintf "in forward, ptr = ~a\n" ptr)
+              (heap-ref (+ ptr 1))]
+    [else (procedure? (heap-ref ptr))]))

@@ -104,6 +104,7 @@
   (cond
     [(null? gray) (free! white)] ;; If the gray list is empty, free the whites with no other work
     [else
+     (eprintf "car of grey set is of type ~a, at loc ~a\n"  (heap-ref (car gray)) (car gray))
      (case (heap-ref (car gray)) ;; Grab the label for each gray cell
        [(flat) ;; Is it a flat value?
         (let ([proc (heap-ref (+ (car gray) 1))])

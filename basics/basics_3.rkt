@@ -15,17 +15,17 @@
 (define mkNum (lambda (f)
                 ((f inc) 0)))
 
-(mkNum zero)
+;(mkNum zero)
 
 (define one (addOne zero))
 
-(mkNum one)
+;(mkNum one)
 
 (define add (lambda (m)
               (lambda (n)
                 ((m addOne) n))))
 
-(mkNum ((add one) one))
+;(mkNum ((add one) one))
 
 (define factNaive (lambda (x)
                     (if (eq? x 1)
@@ -35,7 +35,7 @@
 ; should be
 ; 2,432,902,008,176,640,000
 ; 2,432,902,008,176,640,000
-(factNaive 20)
+;(factNaive 20)
 
 (define t (lambda (x)
             (lambda (y)
@@ -62,7 +62,7 @@
               (lambda (n)
                 ((m sub-one) n))))
 
-(mkNum ((sub one) one))
+;(mkNum ((sub one) one))
 
 
 
@@ -78,28 +78,29 @@
                  ((m (add n)) zero))))
 
 
-(mkNum ((mult one) one))
+;(mkNum ((mult one) one))
 (define two (addOne one))
 
-(mkNum two)
-(mkNum ((mult one) two))
-(mkNum ((mult two) one))
+;(mkNum two)
+;(mkNum ((mult one) two))
+;(mkNum ((mult two) one))
 
 (define three (addOne two))
-(mkNum three)
-(mkNum ((mult two) three))
-(mkNum ((mult three) two))
+;(mkNum three)
+;(mkNum ((mult two) three))
+;(mkNum ((mult three) two))
 
-(mkNum (sub-one three))
+;(mkNum (sub-one three))
 
-(mkNum (((If t) zero) one))
-(mkNum (((If f) zero) one))
+;(mkNum (((If t) zero) one))
+;(mkNum (((If f) zero) one))
 
 (define If0 (lambda (n)
               ((n (λ (x) f)) t)))
 
-(printf "Nested Mult: ~a\n" (mkNum ((mult one) ((mult two) three))))
+;(printf "Nested Mult: ~a\n" (mkNum ((mult one) ((mult two) three))))
 
+; using named functions
 (define factChurch (lambda (x)
                      (begin
                        ;(printf "Entering: ~a\n" (mkNum x))
@@ -112,14 +113,14 @@
                              ((mult x) (factChurch (sub-one x))))))))
 
 
-(mkNum ((lambda (x)
-          (begin
-            (printf "~a\n" (mkNum x))
-            (sub-one x)))
-        three))
-(mkNum (((If0 zero) zero) one))
-(mkNum (((If0 one) zero) one))
-(mkNum (((If0 two) zero) one))
+;(mkNum ((lambda (x)
+;          (begin
+;            (printf "~a\n" (mkNum x))
+;            (sub-one x)))
+;        three))
+;(mkNum (((If0 zero) zero) one))
+;(mkNum (((If0 one) zero) one))
+;(mkNum (((If0 two) zero) one))
 
 (define four (addOne three))
 
@@ -129,6 +130,8 @@
 (mkNum (factChurch three))
 (mkNum (factChurch four))
 
+
+; using anonymous functions
 (define mkFact (lambda (f)
                  (lambda (x)
                      (begin

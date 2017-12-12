@@ -1,0 +1,7 @@
+#lang racket
+
+(define (infer-type c)
+  (match c
+    [number? 'num]
+    [bool? 'bool]
+    [`(lambda ,x ,b) `(-> (infer-type x) (infer-type b))]))
